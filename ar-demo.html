@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>STEM AR Проект</title>
+
+  <!-- A-Frame и AR.js - напълно безплатни -->
+  <script src="https://cdn.jsdelivr.net/npm/aframe@1.4.2/dist/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/ar.js@2.2.2/aframe/build/aframe-ar.min.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0a0e1a;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    /* Overlay UI */
+    #overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 999;
+      pointer-events: none;
+    }
+
+    #header {
+      background: linear-gradient(135deg, rgba(10,20,60,0.92) 0%, rgba(30,10,80,0.85) 100%);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(100,180,255,0.2);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: all;
+    }
+
+    .logo {
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, #4f9eff, #a855f7);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .header-text h1 {
+      font-size: 15px;
+      font-weight: 700;
+      background: linear-gradient(90deg, #4f9eff, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 0.5px;
+    }
+
+    .header-text p {
+      font-size: 11px;
+      color: rgba(255,255,255,0.5);
+      margin-top: 1px;
+    }
+
+    #status-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 20px;
+      background: rgba(0,0,0,0.4);
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      animation: pulse 2s infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    /* Bottom instructions */
+    #instructions {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 999;
+      background: linear-gradient(0deg, rgba(10,14,26,0.95) 0%, transparent 100%);
+      padding: 24px 20px 32px;
+      pointer-events: none;
+    }
+
+    .steps {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+    }
+
+    .step-num {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #4f9eff, #a855f7);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* Scanning animation overlay */
+    #scan-frame {
+      position: fixed;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 220px; height: 220px;
+      z-index: 998;
+      pointer-events: none;
+    }
+
+    .corner {
+      position: absolute;
+      width: 30px; height: 30px;
+      border-color: #4f9eff;
+      border-style: solid;
+      opacity: 0.8;
+    }
+    .corner.tl { top: 0; left: 0; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+    .corner.tr { top: 0; right: 0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+    .corner.bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+    .corner.br { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+
+    .scan-line {
+      position: absolute;
+      left: 4px; right: 4px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #4f9eff, transparent);
+      animation: scan 2s ease-in-out infinite;
+      box-shadow: 0 0 8px #4f9eff;
+    }
+
+    @keyframes scan {
+      0% { top: 4px; opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { top: 214px; opacity: 0; }
+    }
+
+    /* Permission screen */
+    #permission-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: #0a0e1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+      text-align: center;
+      gap: 20px;
+    }
+
+    .perm-icon {
+      font-size: 64px;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    .perm-title {
+      font-size: 24px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #4f9eff, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .perm-desc {
+      font-size: 14px;
+      color: rgba(255,255,255,0.6);
+      line-height: 1.6;
+      max-width: 300px;
+    }
+
+    .perm-btn {
+      background: linear-gradient(135deg, #4f9eff, #a855f7);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      padding: 14px 36px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      pointer-events: all;
+    }
+
+    .perm-btn:active { transform: scale(0.97); opacity: 0.9; }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      width: 100%;
+      max-width: 300px;
+    }
+
+    .feature-card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 14px 12px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .feature-card .icon { font-size: 22px; }
+    .feature-card strong { color: #fff; font-size: 13px; }
+
+    /* Info button */
+    #info-btn {
+      position: fixed;
+      top: 70px;
+      right: 16px;
+      z-index: 999;
+      width: 38px; height: 38px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      cursor: pointer;
+      pointer-events: all;
+    }
+
+    #info-panel {
+      position: fixed;
+      top: 115px;
+      right: 16px;
+      z-index: 999;
+      background: rgba(10,14,26,0.95);
+      border: 1px solid rgba(100,180,255,0.2);
+      border-radius: 16px;
+      padding: 16px;
+      width: 240px;
+      font-size: 12px;
+      display: none;
+      pointer-events: all;
+      backdrop-filter: blur(12px);
+    }
+
+    #info-panel h3 {
+      font-size: 13px;
+      color: #4f9eff;
+      margin-bottom: 10px;
+    }
+
+    #info-panel ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #info-panel li {
+      color: rgba(255,255,255,0.7);
+      display: flex;
+      gap: 8px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Permission / Welcome Screen -->
+  <div id="permission-screen">
+    <div class="perm-icon">🎨</div>
+    <div class="perm-title">STEM AR Картини</div>
+    <div class="perm-desc">
+      Насочи камерата към специален маркер и гледай как картината оживява с 3D анимация!
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <span class="icon">📷</span>
+        <strong>Камера</strong>
+        Разпознава маркера
+      </div>
+      <div class="feature-card">
+        <span class="icon">✨</span>
+        <strong>AR магия</strong>
+        3D обекти върху картина
+      </div>
+      <div class="feature-card">
+        <span class="icon">🆓</span>
+        <strong>Безплатно</strong>
+        100% open source
+      </div>
+      <div class="feature-card">
+        <span class="icon">📱</span>
+        <strong>Без app</strong>
+        Работи в браузър
+      </div>
+    </div>
+
+    <button class="perm-btn" onclick="startAR()">🚀 Стартирай AR</button>
+    <div style="font-size:11px; color:rgba(255,255,255,0.3);">Нужен е достъп до камерата</div>
+  </div>
+
+  <!-- AR Scene - скрита докато не стартира -->
+  <div id="ar-container" style="display:none; width:100vw; height:100vh;">
+
+    <!-- UI Overlay -->
+    <div id="overlay">
+      <div id="header">
+        <div class="logo">🎨</div>
+        <div class="header-text">
+          <h1>STEM AR Картини</h1>
+          <p>Насочи камерата към маркера</p>
+        </div>
+      </div>
+      <div id="status-bar">
+        <div class="dot"></div>
+        <span id="status-text">Търси маркер... Насочи камерата към картината</span>
+      </div>
+    </div>
+
+    <!-- Info button -->
+    <div id="info-btn" onclick="toggleInfo()">ℹ️</div>
+    <div id="info-panel">
+      <h3>Как работи?</h3>
+      <ul>
+        <li>📌 Разпечатай маркера от PDF файла</li>
+        <li>📷 Насочи камерата към него</li>
+        <li>✨ Виж 3D анимацията да оживява</li>
+        <li>🔄 Движи телефона за различни ъгли</li>
+      </ul>
+    </div>
+
+    <!-- Scanning frame -->
+    <div id="scan-frame">
+      <div class="corner tl"></div>
+      <div class="corner tr"></div>
+      <div class="corner bl"></div>
+      <div class="corner br"></div>
+      <div class="scan-line"></div>
+    </div>
+
+    <!-- Instructions -->
+    <div id="instructions">
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div>Разпечатай маркера</div>
+        <div class="step"><div class="step-num">2</div>Насочи камерата</div>
+        <div class="step"><div class="step-num">3</div>Гледай!</div>
+      </div>
+    </div>
+
+    <!--
+      ═══════════════════════════════════════════════════════════
+      AR СЦЕНА — ТУК ПОСТАВЯШ СВОИТЕ 3D ОБЕКТИ И АНИМАЦИИ
+      ═══════════════════════════════════════════════════════════
+    -->
+    <a-scene
+      embedded
+      arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+      renderer="logarithmicDepthBuffer: true; antialias: true;"
+      vr-mode-ui="enabled: false"
+      style="width:100%; height:100%;">
+
+      <!-- МАРКЕР: използва Hiro маркера (включен в AR.js) -->
+      <!-- За свой маркер: смени type="hiro" с твой preset или pattern -->
+      <a-marker preset="hiro" id="main-marker">
+
+        <!--
+          ═══════════════════════════
+          3D СЪДЪРЖАНИЕ ВЪРХУ МАРКЕРА
+          Замени това с твоята анимация!
+          ═══════════════════════════
+        -->
+
+        <!-- Въртяща се земя (сфера с цвят) -->
+        <a-sphere
+          id="earth"
+          position="0 1 0"
+          radius="0.6"
+          color="#1a6ba0"
+          animation="property: rotation; to: 0 360 0; loop: true; dur: 4000; easing: linear"
+          animation__bob="property: position; from: 0 0.8 0; to: 0 1.2 0; dir: alternate; loop: true; dur: 2000; easing: easeInOutSine">
+          <!-- Континенти (зелени петна) -->
+          <a-sphere position="0.3 0.3 0.5" radius="0.15" color="#2d7a3a"></a-sphere>
+          <a-sphere position="-0.4 0.1 0.4" radius="0.12" color="#2d7a3a"></a-sphere>
+          <a-sphere position="0.1 -0.4 0.5" radius="0.1" color="#2d7a3a"></a-sphere>
+        </a-sphere>
+
+        <!-- Орбитираща луна -->
+        <a-entity
+          id="moon-orbit"
+          animation="property: rotation; to: 0 360 0; loop: true; dur: 3000; easing: linear">
+          <a-sphere
+            position="1.2 1 0"
+            radius="0.18"
+            color="#cccccc"
+            animation="property: rotation; to: 360 0 0; loop: true; dur: 2000; easing: linear">
+          </a-sphere>
+        </a-entity>
+
+        <!-- Звезди / частици около земята -->
+        <a-entity position="0 1 0">
+          <a-sphere position="1.8 0.5 0" radius="0.04" color="#fff" opacity="0.9"
+            animation="property: opacity; from:0.3; to:1; loop:true; dur:1200; dir:alternate"></a-sphere>
+          <a-sphere position="-1.6 0.8 0.3" radius="0.04" color="#fff" opacity="0.9"
+            animation="property: opacity; from:0.9; to:0.2; loop:true; dur:900; dir:alternate"></a-sphere>
+          <a-sphere position="0.5 1.7 -0.5" radius="0.03" color="#ffffaa" opacity="0.9"
+            animation="property: opacity; from:0.2; to:1; loop:true; dur:1500; dir:alternate"></a-sphere>
+          <a-sphere position="-0.8 -1.2 0.2" radius="0.03" color="#fff" opacity="0.9"
+            animation="property: opacity; from:0.6; to:0.1; loop:true; dur:700; dir:alternate"></a-sphere>
+        </a-entity>
+
+        <!-- Текст под земята -->
+        <a-text
+          value="STEM AR Demo\nНасочи камерата!"
+          align="center"
+          position="0 0.1 0"
+          rotation="-90 0 0"
+          scale="0.5 0.5 0.5"
+          color="#4f9eff">
+        </a-text>
+
+        <!-- Платформа -->
+        <a-box
+          position="0 0.05 0"
+          width="2.2"
+          height="0.08"
+          depth="2.2"
+          color="#0a0e1a"
+          opacity="0.7">
+        </a-box>
+
+      </a-marker>
+
+      <!-- Камера -->
+      <a-entity camera></a-entity>
+
+    </a-scene>
+  </div>
+
+  <script>
+    let arStarted = false;
+
+    function startAR() {
+      document.getElementById('permission-screen').style.display = 'none';
+      document.getElementById('ar-container').style.display = 'block';
+      arStarted = true;
+      listenForMarker();
+    }
+
+    function toggleInfo() {
+      const panel = document.getElementById('info-panel');
+      panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+    }
+
+    function listenForMarker() {
+      const marker = document.getElementById('main-marker');
+      if (!marker) {
+        setTimeout(listenForMarker, 500);
+        return;
+      }
+
+      const statusText = document.getElementById('status-text');
+      const scanFrame = document.getElementById('scan-frame');
+      const instructions = document.getElementById('instructions');
+
+      marker.addEventListener('markerFound', () => {
+        statusText.textContent = '✨ Маркер открит! Анимацията е активна';
+        scanFrame.style.display = 'none';
+        instructions.style.opacity = '0.3';
+        document.querySelector('.dot').style.background = '#a855f7';
+      });
+
+      marker.addEventListener('markerLost', () => {
+        statusText.textContent = 'Търси маркер... Насочи камерата към картината';
+        scanFrame.style.display = 'block';
+        instructions.style.opacity = '1';
+        document.querySelector('.dot').style.background = '#22c55e';
+      });
+    }
+
+    // Скрий scan frame при клик
+    document.addEventListener('click', (e) => {
+      const panel = document.getElementById('info-panel');
+      const btn = document.getElementById('info-btn');
+      if (panel && btn && !panel.contains(e.target) && !btn.contains(e.target)) {
+        panel.style.display = 'none';
+      }
+    });
+  </script>
+
+</body>
+</html>
